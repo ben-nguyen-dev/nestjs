@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common'
-import { CreateUserDto } from '../dtos/create-user.dto'
-import { UpdateUserDto } from '../dtos/update-user.dto'
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
+import { CreateUserDto, UpdateUserDto, LoginUserDto } from '../dtos/user.dto'
 import { UserRepository } from '../repositories/user.repository'
+import * as bcrypt from 'bcrypt'
 
 @Injectable()
 export class UserService {
@@ -12,7 +12,41 @@ export class UserService {
     }
 
     async create(createUserDto: CreateUserDto) {
+        createUserDto.password = await bcrypt.hash(createUserDto.password, Number(process.env.SALT_ROUNDS))
+
+        const userExisted = await this.userRepository.findByCondition({
+            email: createUserDto.email,
+        })
+
+        if (userExisted) {
+            throw new HttpException('User already exists', HttpStatus.BAD_REQUEST)
+        }
+
         return this.userRepository.create(createUserDto)
+    }
+
+    async findByLogin({ email, password }: LoginUserDto) {
+        const userExisted = await this.userRepository.findByCondition({
+            email,
+        })
+
+        if (!userExisted) {
+            throw new HttpException('Email or password invalid', HttpStatus.UNAUTHORIZED)
+        }
+
+        const isEqualPassword: boolean = bcrypt.compareSync(password, userExisted.password)
+
+        if (!isEqualPassword) {
+            throw new HttpException('Email or password invalid', HttpStatus.UNAUTHORIZED)
+        }
+
+        return userExisted
+    }
+
+    async findByEmail(email) {
+        return await this.userRepository.findByCondition({
+            email: email,
+        })
     }
 
     async findAll() {
